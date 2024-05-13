@@ -2,10 +2,19 @@ Package: rjdproduction
 Type: Package
 Title: What the Package Does (Title Case)
 Version: 0.1.0
-Author: Who wrote it
+Authors@R: c(
+    person(given = "Tanguy", 
+           family = "Barthelemy", role = c("aut"),
+           email ="tanguy.barthelemy@insee.fr"))
 Maintainer: The package maintainer <yourself@somewhere.net>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
+Imports:
+    rJava (>= 0.9-8),
+    RJDemetra, 
+    rjdworkspace, 
+    stats lag, 
+    dplyr lag
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
