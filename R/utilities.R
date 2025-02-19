@@ -60,18 +60,18 @@ get_cjo_regressor_sai <- function(specification) {
 
 
 get_cjo_regressor_ws <- function(ws_xml_path) {
-    ws_ref <- load_workspace(normalizePath(ws_xml_path, mustWork = TRUE))
-    compute(ws_ref)
+    ws_ref <- RJDemetra::load_workspace(normalizePath(ws_xml_path, mustWork = TRUE))
+    RJDemetra::compute(ws_ref)
 
-    sap <- ws_ref |> get_object()
-    regs_cjo_tab <- data.frame(series = get_all_names(sap), reg_cjo = character(count(sap)))
+    sap <- ws_ref |> RJDemetra::get_object()
+    regs_cjo_tab <- data.frame(series = RJDemetra::get_all_names(sap), reg_cjo = character(RJDemetra::count(sap)))
 
-    for (k in seq_len(count(sap))) {
-        cat(paste0("Série ", k, "/", count(sap), "\n"))
+    for (k in seq_len(RJDemetra::count(sap))) {
+        cat(paste0("Série ", k, "/", RJDemetra::count(sap), "\n"))
 
         regs_cjo <- sap |>
-            get_object(k) |>
-            get_model(workspace = ws_ref) |>
+            RJDemetra::get_object(k) |>
+            RJDemetra::get_model(workspace = ws_ref) |>
             get_cjo_regressor_sai()
 
         regs_cjo_tab[k, "reg_cjo"] <- regs_cjo
@@ -80,13 +80,45 @@ get_cjo_regressor_ws <- function(ws_xml_path) {
     return(regs_cjo_tab)
 }
 
+get_outliers_ws <- function(ws_path, verbose = TRUE) {
+    ws <- load_workspace(ws_path)
+    RJDemetra::compute(ws)
+    nb_sap <- RJDemetra::count(ws)
+    list_output <- list()
+    for (idx in seq_len(nb_sap)) {
+        if (verbose) {
+            cat("Updating SAP:", sap |> RJDemetra::get_name(), idx, "/", nb_sap, "...\n")
+        }
+        sap <- ws |> RJDemetra::get_object(idx)
+        out <- get_outliers_sap(sap, ws = ws)
+        list_output <- c(list_output, list(out))
+    }
+    names(list_output) <- RJDemetra::get_all_names(ws)
+    return(list_output)
+}
+
+get_outliers_sap <- function(sap, ws, verbose = TRUE) {
+    nb_sai <- RJDemetra::count(sap)
+    list_output <- list()
+    for (idx in seq_len(nb_sai)) {
+        if (verbose) {
+            cat("Updating SAI:", sai |> RJDemetra::get_name(), idx, "/", nb_sai, "...\n")
+        }
+        sai <- sap |> RJDemetra::get_object(idx)
+        out <- get_outliers_sai(sai |> RJDemetra::get_model(ws))
+        list_output <- c(list_output, list(out))
+    }
+    names(list_output) <- RJDemetra::get_all_names(sap)
+    return(list_output)
+}
+
 # récupérer les outliers associé à un SA-ITEM
 
 get_outliers_sai <- function(specification, after = TRUE, sorted = TRUE, date_min) {
 
     regressors <- specification$regarima$specification$regression$userdef$outliers
 
-    if (nrow(regressors) > 0) {
+    if (!is.null(regressors) && !is.null(dim(regressors)) && nrow(regressors) > 0) {
         outliers_type <- regressors$type
         outliers_date <- regressors$date |>
             as.Date(format = "%Y-%m-%d")
@@ -121,7 +153,7 @@ get_outliers_sai <- function(specification, after = TRUE, sorted = TRUE, date_mi
 # Changer le domainSpec
 
 set_domain_spec <- function(sa_item, spec) {
-    sa_def <- .jcall(
+    sa_def <- rJava::.jcall(
         obj = sa_item,
         returnSig = "Ljd2/datatypes/sa/SaItemType;",
         method = "getSaDefinition"
@@ -131,7 +163,7 @@ set_domain_spec <- function(sa_item, spec) {
         sa_def = sa_def,
         domainSpec = RJDemetra::get_jspec(spec)
     )
-    new_sa_item <- .jnew("ec/tstoolkit/jdr/ws/SaItem", sa_item)
+    new_sa_item <- rJava::.jnew("ec/tstoolkit/jdr/ws/SaItem", sa_item)
     new_sa_item
 }
 
@@ -141,15 +173,15 @@ set_domain_spec <- function(sa_item, spec) {
 
 create_reg_cjo_sets <- function(regs_cjo) {
 
-    REG1 <- regs_cjo[, "REG1_Semaine", drop = FALSE]
-    attr(REG1, "class") <- c("mts", "ts", "matrix", "array")
+    reg1 <- regs_cjo[, "REG1_Semaine", drop = FALSE]
+    attr(reg1, "class") <- c("mts", "ts", "matrix", "array")
 
-    LY <- regs_cjo[, "LY", drop = FALSE]
-    attr(LY, "class") <- c("mts", "ts", "matrix", "array")
+    ly <- regs_cjo[, "LY", drop = FALSE]
+    attr(ly, "class") <- c("mts", "ts", "matrix", "array")
 
     sets <- list(
         Pas_CJO = NULL,
-        REG1 = REG1,
+        REG1 = reg1,
         REG2 = regs_cjo[, c("REG2_Semaine", "REG2_Samedi")],
         REG3 = regs_cjo[, c("REG3_Lundi", "REG3_Semaine", "REG3_Samedi")],
         REG5 = regs_cjo[, c(
@@ -160,7 +192,7 @@ create_reg_cjo_sets <- function(regs_cjo) {
             "REG6_Lundi", "REG6_Mardi", "REG6_Mercredi",
             "REG6_Jeudi", "REG6_Vendredi", "REG6_Samedi"
         )],
-        LY = LY,
+        LY = ly,
         REG1_LY = regs_cjo[, c("REG1_Semaine", "LY")],
         REG2_LY = regs_cjo[, c("REG2_Semaine", "REG2_Samedi", "LY")],
         REG3_LY = regs_cjo[, c("REG3_Lundi", "REG3_Semaine", "REG3_Samedi", "LY")],
@@ -232,7 +264,7 @@ all_diagnostics <- function(serie, spec_sets, outliers = NULL) {
     output <- lapply(X = seq_along(spec_sets), FUN = function(k) {
         spec_out <- spec_sets[[k]]
         if (!is.null(outliers)) {
-            spec_out <- x13_spec(
+            spec_out <- RJDemetra::x13_spec(
                 spec = spec_out,
                 usrdef.outliersEnabled = TRUE,
                 usrdef.outliersType = outliers$type,
@@ -294,8 +326,8 @@ select_regs <- function(series, ws_ref, with_outliers = FALSE, regs_cjo) {
     }
 
     if (with_outliers) {
-        sap_ref <- ws_ref |> get_object()
-        series_name_ref <- get_all_names(sap_ref)
+        sap_ref <- ws_ref |> RJDemetra::get_object()
+        series_name_ref <- RJDemetra::get_all_names(sap_ref)
     }
 
     output <- sapply(X = seq_len(ncol(series)), FUN = function(k) {
@@ -304,8 +336,8 @@ select_regs <- function(series, ws_ref, with_outliers = FALSE, regs_cjo) {
 
         if (with_outliers) {
             # On récupère les outliers
-            sai_ref <- sap_ref |> get_object(which(series_name_ref == series_name))
-            sai_mod <- sai_ref |> get_model(workspace = ws_ref)
+            sai_ref <- sap_ref |> RJDemetra::get_object(which(series_name_ref == series_name))
+            sai_mod <- sai_ref |> RJDemetra::get_model(workspace = ws_ref)
             outliers <- sai_mod |> get_outliers_sai(after = FALSE, sorted = TRUE)
         }
 
@@ -335,8 +367,8 @@ write_data <- function(data, path) {
 create_ws_with_cjo <- function(ws_template_xml, choix_cjo, ws_destination_xml) {
 
     # Création WS_auto
-    ws_auto <- new_workspace()
-    sap1 <- new_multiprocessing(ws_auto, "SAProcessing-1")
+    ws_auto <- RJDemetra::new_workspace()
+    RJDemetra::new_multiprocessing(ws_auto, "SAProcessing-1")
 
     # Chargement ws_template_cjo
     # le WS template est un WS qui contient :
@@ -344,12 +376,12 @@ create_ws_with_cjo <- function(ws_template_xml, choix_cjo, ws_destination_xml) {
     #   - autant de SAP que de jeux de régresseurs
     #   - des utilities remplies et à jour
 
-    ws_template_cjo <- load_workspace(file = ws_template_xml)
-    compute(ws_template_cjo)
+    ws_template_cjo <- RJDemetra::load_workspace(file = ws_template_xml)
+    RJDemetra::compute(ws_template_cjo)
 
     series_name <- ws_template_cjo |>
-        get_object() |>
-        get_all_names()
+        RJDemetra::get_object() |>
+        RJDemetra::get_all_names()
 
     # Chargement fichier de choix de regresseurs
     # le fichier choix cjo doit contenir au moins 2 colonnes :
@@ -372,107 +404,83 @@ create_ws_with_cjo <- function(ws_template_xml, choix_cjo, ws_destination_xml) {
 
 
     # Sauvegarde du WS_auto
-    save_workspace(ws_auto, file = ws_destination_xml)
+    RJDemetra::save_workspace(ws_auto, file = ws_destination_xml)
 
     message("Il faut maintenant ajouter à la main les variables externes au WS auto sous la GUI")
 
     return(invisible(TRUE))
 }
 
-affect_outliers <- function(ws_ref_xml, ws_auto_xml) {
-    ws_auto <- load_workspace(file = ws_auto_xml)
-    ws_ref <- load_workspace(file = ws_ref_xml)
+affect_outliers <- function(ws_ref_xml, ws_auto_xml, sap_name = "SAProcessing-2") {
+    ws_auto <- RJDemetra::load_workspace(file = ws_auto_xml)
+    ws_ref <- RJDemetra::load_workspace(file = ws_ref_xml)
 
-    compute(ws_auto)
-    compute(ws_ref)
+    RJDemetra::compute(ws_auto)
+    RJDemetra::compute(ws_ref)
 
-    sap_auto <- ws_auto |> get_object()
-    sap_ref <- ws_ref |> get_object()
+    sap_auto <- ws_auto |> RJDemetra::get_object()
+    sap_ref <- ws_ref |> RJDemetra::get_object()
 
-    sap_auto2 <- new_multiprocessing(ws_auto, name = "SAProcessing-2")
+    sap_auto2 <- RJDemetra::new_multiprocessing(ws_auto, name = sap_name)
 
-    # sap_auto3 <- new_multiprocessing(ws_auto, name = "SAProcessing-3")
-
-    series_name_ref <- sap_ref |> get_all_names()
-    series_name_auto <- sap_auto |> get_all_names()
+    series_name_ref <- sap_ref |> RJDemetra::get_all_names()
+    series_name_auto <- sap_auto |> RJDemetra::get_all_names()
 
 
-    # Ajouter les outliers du WS ref sur le WS auto --------------------------------
+    # Ajouter les outliers du WS ref sur le WS auto ----------------------------
 
-    for (k in seq_len(sap_auto |> count())) {
+    for (k in seq_len(sap_auto |> RJDemetra::count())) {
         series_name <- series_name_auto[k]
-        cat(paste0("Série ", series_name, " en cours... ", k, "/", sap_auto |> count()), "\n")
+        cat(paste0("Série ", series_name, " en cours... ", k, "/", sap_auto |> RJDemetra::count()), "\n")
 
-        sai_auto <- sap_auto |> get_object(which(series_name_auto == series_name))
-        sai_ref <- sap_ref |> get_object(which(series_name_ref == series_name))
+        sai_auto <- sap_auto |> RJDemetra::get_object(which(series_name_auto == series_name))
+        sai_ref <- sap_ref |> RJDemetra::get_object(which(series_name_ref == series_name))
 
-        outliers <- get_outliers_sai(sai_ref |> get_model(workspace = ws_ref))
+        outliers <- get_outliers_sai(sai_ref |> RJDemetra::get_model(workspace = ws_ref))
 
         if (length(outliers$date) > 0) {
-            spec_init <- sai_auto |> get_model(ws_auto)
+            spec_init <- sai_auto |> RJDemetra::get_model(ws_auto)
 
             # lors de la création de la new_spec, RJDemetra récupère les variables de régression sans leur nom de groupe
-            new_spec <- x13_spec(
+            new_spec <- NULL
+            try(new_spec <- RJDemetra::x13_spec(
                 spec = spec_init,
                 # estimate.from = "2012-01-01",
                 usrdef.outliersEnabled = TRUE,
                 usrdef.outliersType = outliers$type,
                 usrdef.outliersDate = outliers$date |> as.character()
-            )
+            ))
 
-            # Lors de la création du sa-item, rjdworkspace ecrit les variables de régression dans un seul et même groupe appelé r
-            new_sai <- x13(series = spec_init$final$series[, "y"], spec = new_spec)
+            if (is.null(new_spec)) {
+                rjdworkspace::add_new_sa_item(sap = sap_auto2, sa_item = sai_auto)
+            } else {
 
-            # new_sai2 <- rjdworkspace::set_spec(sai_auto, new_spec)
-            # SAP 1
-            add_sa_item(workspace = ws_auto, multiprocessing = "SAProcessing-2", sa_obj = new_sai, name = series_name)
+                # Lors de la création du sa-item, rjdworkspace ecrit les variables de régression dans un seul et même groupe appelé r
+                new_sai <- RJDemetra::x13(
+                    series = spec_init$final$series[, "y"],
+                    spec = sai_auto |> RJDemetra::get_model(ws_auto) |> RJDemetra::x13_spec()
+                )
 
-            # SAP 2
-            # replace_sa_item(mp = sap_auto2, pos = k, sa_item = new_sai2)
-            # SAP 3
-            # add_new_sa_item(mp = sap_auto3, sa_item = new_sai2)
+                # new_sai2 <- rjdworkspace::set_spec(sai_auto, new_spec)
+                # SAP 1
+                RJDemetra::add_sa_item(
+                    workspace = ws_auto,
+                    multiprocessing = sap_name,
+                    sa_obj = new_sai,
+                    name = series_name
+                )
+
+                # SAP 2
+                # replace_sa_item(mp = sap_auto2, pos = k, sa_item = new_sai2)
+                # SAP 3
+                # add_new_sa_item(mp = sap_auto3, sa_item = new_sai2)
+            }
+
         } else {
-            add_new_sa_item(sap = sap_auto2, sa_item = sai_auto)
+            rjdworkspace::add_new_sa_item(sap = sap_auto2, sa_item = sai_auto)
         }
     }
 
-    save_workspace(ws_auto, file = ws_auto_xml)
-}
-
-update_metadata <- function(ws_from, ws_to, pos_sap_from, pos_sap_to)
-{
-    all_sap_ws_from <- RJDemetra::get_all_objects(ws_from)
-    all_sap_ws_from_names <- names(all_sap_ws_from)
-
-    if (pos_sap_from > count(ws_from)) {
-        stop("Wrong index")
-    }
-
-    if (pos_sap_to > count(ws_to)) {
-        stop("Wrong index")
-    }
-
-    sap_ws_to <- RJDemetra::get_object(ws_to, pos_sap_to)
-    sap_ws_from <- RJDemetra::get_object(ws_from, pos_sap_from)
-
-    for (pos_sa in seq_len(RJDemetra::count(sap_ws_to))) {
-
-        sa_ws_to <- RJDemetra::get_object(sap_ws_to, pos_sa)
-        sa_name <- RJDemetra::get_name(sa_ws_to)
-
-        sa_ws_from_i <- which(RJDemetra::get_all_names(sap_ws_from) %in% sa_name)
-        if (length(sa_ws_from_i) != 1) {
-            stop("erreur sur les noms")
-        }
-
-        sa_ws_from <- RJDemetra::get_object(x = sap_ws_from,
-                                            pos = sa_ws_from_i[1])
-        new_sa_item <- set_metadata(sa_to = sa_ws_to,
-                                    sa_from = sa_ws_from)
-        replace_sa_item(sap = sap_ws_to, sa_item = new_sa_item,
-                        pos = pos_sa)
-    }
-
-    return(ws_to)
+    RJDemetra::save_workspace(ws_auto, file = ws_auto_xml)
 }
 

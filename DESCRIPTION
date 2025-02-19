@@ -4,17 +4,18 @@ Title: What the Package Does (Title Case)
 Version: 0.1.0
 Authors@R: c(
     person(given = "Tanguy", 
-           family = "Barthelemy", role = c("aut"),
+           family = "Barthelemy", role = c("aut", "cre"),
            email ="tanguy.barthelemy@insee.fr"))
 Maintainer: The package maintainer <yourself@somewhere.net>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
-Imports:
+Imports: 
     rJava (>= 0.9-8),
     RJDemetra, 
-    rjdworkspace, 
-    stats lag, 
-    dplyr lag
+    rjdworkspace,
+    dplyr,
+    stats
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
+RoxygenNote: 7.3.1
